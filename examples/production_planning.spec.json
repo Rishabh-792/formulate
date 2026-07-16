@@ -1,0 +1,78 @@
+{
+  "name": "meridian_production",
+  "description": "Weekly production mix for Meridian Woodworks: three products share two machines; maximize total profit",
+  "sets": [
+    {
+      "name": "P",
+      "members": ["chair", "table", "desk"],
+      "description": "products"
+    },
+    {
+      "name": "M",
+      "members": ["cutting", "assembly"],
+      "description": "machines"
+    }
+  ],
+  "params": [
+    {
+      "name": "profit",
+      "indexed_by": ["P"],
+      "values": {"chair": 25, "table": 110, "desk": 75},
+      "description": "profit per unit sold"
+    },
+    {
+      "name": "hours",
+      "indexed_by": ["P", "M"],
+      "values": {
+        "chair,cutting": 1,
+        "chair,assembly": 2,
+        "table,cutting": 3,
+        "table,assembly": 2,
+        "desk,cutting": 2,
+        "desk,assembly": 3
+      },
+      "description": "machine hours per unit"
+    },
+    {
+      "name": "capacity",
+      "indexed_by": ["M"],
+      "values": {"cutting": 160, "assembly": 250},
+      "description": "machine hours available per week"
+    },
+    {
+      "name": "demand",
+      "indexed_by": ["P"],
+      "values": {"chair": 100, "table": 20, "desk": 30},
+      "description": "maximum sellable units per week"
+    }
+  ],
+  "variables": [
+    {
+      "name": "make",
+      "indexed_by": ["P"],
+      "domain": "continuous",
+      "lower": 0.0,
+      "upper": null,
+      "description": "units to produce"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "machine_capacity",
+      "forall": [{"index": "m", "over": "M"}],
+      "expr": "sum(p in P, hours[p,m] * make[p]) <= capacity[m]",
+      "description": "each machine's weekly hours are limited"
+    },
+    {
+      "name": "demand_limit",
+      "forall": [{"index": "p", "over": "P"}],
+      "expr": "make[p] <= demand[p]",
+      "description": "do not build more than the market absorbs"
+    }
+  ],
+  "objective": {
+    "sense": "maximize",
+    "expr": "sum(p in P, profit[p] * make[p])",
+    "description": "total weekly profit"
+  }
+}

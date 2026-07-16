@@ -1,0 +1,72 @@
+{
+  "name": "northlake_distribution",
+  "description": "Northlake Beverages ships pallets from two bottling plants to three regional warehouses at minimum freight cost",
+  "sets": [
+    {
+      "name": "PLANTS",
+      "members": ["avonford", "brightmoor"],
+      "description": "bottling plants"
+    },
+    {
+      "name": "WAREHOUSES",
+      "members": ["carverton", "dunmore", "eastvale"],
+      "description": "regional warehouses"
+    }
+  ],
+  "params": [
+    {
+      "name": "supply",
+      "indexed_by": ["PLANTS"],
+      "values": {"avonford": 60, "brightmoor": 80},
+      "description": "pallets available per day"
+    },
+    {
+      "name": "demand",
+      "indexed_by": ["WAREHOUSES"],
+      "values": {"carverton": 50, "dunmore": 40, "eastvale": 50},
+      "description": "pallets required per day"
+    },
+    {
+      "name": "cost",
+      "indexed_by": ["PLANTS", "WAREHOUSES"],
+      "values": {
+        "avonford,carverton": 4,
+        "avonford,dunmore": 6,
+        "avonford,eastvale": 9,
+        "brightmoor,carverton": 5,
+        "brightmoor,dunmore": 3,
+        "brightmoor,eastvale": 2
+      },
+      "description": "freight cost per pallet"
+    }
+  ],
+  "variables": [
+    {
+      "name": "ship",
+      "indexed_by": ["PLANTS", "WAREHOUSES"],
+      "domain": "continuous",
+      "lower": 0.0,
+      "upper": null,
+      "description": "pallets shipped per day"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "supply_limit",
+      "forall": [{"index": "s", "over": "PLANTS"}],
+      "expr": "sum(w in WAREHOUSES, ship[s,w]) <= supply[s]",
+      "description": "a plant cannot ship more than it bottles"
+    },
+    {
+      "name": "demand_met",
+      "forall": [{"index": "w", "over": "WAREHOUSES"}],
+      "expr": "sum(s in PLANTS, ship[s,w]) >= demand[w]",
+      "description": "every warehouse receives what it needs"
+    }
+  ],
+  "objective": {
+    "sense": "minimize",
+    "expr": "sum(s in PLANTS, sum(w in WAREHOUSES, cost[s,w] * ship[s,w]))",
+    "description": "total daily freight cost"
+  }
+}

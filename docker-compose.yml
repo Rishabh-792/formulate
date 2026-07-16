@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+
+  ui:
+    build: .
+    command: streamlit run ui/app.py --server.address 0.0.0.0 --server.port 8501
+    ports:
+      - "8501:8501"
+    env_file:
+      - path: .env
+        required: false

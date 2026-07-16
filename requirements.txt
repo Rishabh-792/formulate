@@ -1,0 +1,8 @@
+pydantic>=2.7
+pydantic-settings>=2.2
+pyomo>=6.7
+highspy>=1.7
+fastapi>=0.111
+uvicorn>=0.30
+openai>=1.30
+streamlit>=1.35
