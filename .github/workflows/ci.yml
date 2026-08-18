@@ -48,6 +48,55 @@ jobs:
           path: coverage.xml
           retention-days: 14
 
+  # Checks the engine against optima found by exhaustive enumeration in plain
+  # Python. The oracle never calls Pyomo or HiGHS, so a match is evidence the
+  # engine is correct rather than merely self-consistent.
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements-dev.txt
+
+      # Exits non-zero if any problem misses its enumerated optimum.
+      - name: Run correctness benchmark
+        run: python -m bench.run_benchmark --repeats 5
+
+      - name: Verify committed results still reproduce
+        run: |
+          python - <<'PY'
+          import json, subprocess, sys
+
+          fresh = json.load(open("bench/results.json"))["summary"]
+          committed = json.loads(
+              subprocess.check_output(["git", "show", "HEAD:bench/results.json"])
+          )["summary"]
+
+          if fresh["passed"] != fresh["problems"]:
+              sys.exit(f"{fresh['failed']} problem(s) missed the enumerated optimum")
+          if committed["problems"] != fresh["problems"]:
+              sys.exit(
+                  f"problem count changed ({committed['problems']} -> {fresh['problems']}); "
+                  "re-run the benchmark and commit bench/results.json"
+              )
+          print(f"{fresh['passed']}/{fresh['problems']} exact, "
+                f"max error {fresh['max_absolute_error']:.2e}")
+          PY
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench/results.json
+          retention-days: 14
+
   terraform:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -1,0 +1,138 @@
+{
+  "generated_at_utc": "2026-08-18T03:28:05+00:00",
+  "environment": {
+    "python": "3.13.3",
+    "platform": "Windows"
+  },
+  "tolerance": 1e-06,
+  "repeats_per_problem": 5,
+  "summary": {
+    "problems": 5,
+    "passed": 5,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "max_absolute_error": 0.0,
+    "median_latency_ms": 36.602,
+    "slowest_median_latency_ms": 62.231
+  },
+  "cases": [
+    {
+      "problem": "knapsack",
+      "description": "0/1 knapsack over 8 machines",
+      "exercises": [
+        "binary domain",
+        "scalar param",
+        "unindexed constraint"
+      ],
+      "status": "optimal",
+      "solver": "appsi_highs",
+      "expected_optimum": 196.0,
+      "oracle_method": "exhaustive enumeration of 2^8 = 256 subsets",
+      "reported_objective": 196.0,
+      "absolute_error": 0.0,
+      "passed": true,
+      "transforms_applied": [],
+      "validation_warnings": 0,
+      "latency_ms": {
+        "min": 51.838,
+        "median": 62.231,
+        "max": 218.578
+      }
+    },
+    {
+      "problem": "assignment",
+      "description": "4x4 assignment problem",
+      "exercises": [
+        "binary domain",
+        "2-D indexed param",
+        "equality constraints",
+        "nested sum"
+      ],
+      "status": "optimal",
+      "solver": "appsi_highs",
+      "expected_optimum": 11.0,
+      "oracle_method": "exhaustive enumeration of 4! = 24 permutations",
+      "reported_objective": 11.0,
+      "absolute_error": 0.0,
+      "passed": true,
+      "transforms_applied": [],
+      "validation_warnings": 0,
+      "latency_ms": {
+        "min": 27.498,
+        "median": 30.779,
+        "max": 37.355
+      }
+    },
+    {
+      "problem": "set_cover",
+      "description": "6-depot set cover over 8 regions",
+      "exercises": [
+        "binary domain",
+        "0/1 incidence param",
+        ">= constraint"
+      ],
+      "status": "optimal",
+      "solver": "appsi_highs",
+      "expected_optimum": 28.0,
+      "oracle_method": "exhaustive enumeration of 2^6 = 64 depot subsets",
+      "reported_objective": 28.0,
+      "absolute_error": 0.0,
+      "passed": true,
+      "transforms_applied": [],
+      "validation_warnings": 0,
+      "latency_ms": {
+        "min": 31.175,
+        "median": 36.602,
+        "max": 37.781
+      }
+    },
+    {
+      "problem": "integer_production",
+      "description": "3-product integer production plan",
+      "exercises": [
+        "integer domain",
+        "variable upper bounds",
+        "multiple scalar params"
+      ],
+      "status": "optimal",
+      "solver": "appsi_highs",
+      "expected_optimum": 900.0,
+      "oracle_method": "exhaustive enumeration of 2197 integer grid points",
+      "reported_objective": 900.0,
+      "absolute_error": 0.0,
+      "passed": true,
+      "transforms_applied": [],
+      "validation_warnings": 0,
+      "latency_ms": {
+        "min": 31.889,
+        "median": 41.82,
+        "max": 44.921
+      }
+    },
+    {
+      "problem": "abs_deviation",
+      "description": "shift balancing with absolute deviations",
+      "exercises": [
+        "abs() epigraph transform",
+        "integer domain",
+        "equality constraint"
+      ],
+      "status": "optimal",
+      "solver": "appsi_highs",
+      "expected_optimum": 5.0,
+      "oracle_method": "exhaustive enumeration of 14641 rosters",
+      "reported_objective": 5.0,
+      "absolute_error": 0.0,
+      "passed": true,
+      "transforms_applied": [
+        "abs-epigraph"
+      ],
+      "validation_warnings": 0,
+      "latency_ms": {
+        "min": 24.43,
+        "median": 29.745,
+        "max": 37.716
+      }
+    }
+  ]
+}
