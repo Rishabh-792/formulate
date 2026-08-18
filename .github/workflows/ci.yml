@@ -5,18 +5,180 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same ref supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python >= 3.11; test everything it claims.
+        python-version: ["3.11", "3.12", "3.13"]
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test (mock mode, no API keys)
+        run: pytest -q --cov=formulate --cov=api --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
+
+  # Checks the engine against optima found by exhaustive enumeration in plain
+  # Python. The oracle never calls Pyomo or HiGHS, so a match is evidence the
+  # engine is correct rather than merely self-consistent.
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
+
       - name: Install
         run: pip install -r requirements-dev.txt
-      - name: Lint
-        run: ruff check .
-      - name: Test
-        run: pytest -q
+
+      # Exits non-zero if any problem misses its enumerated optimum.
+      - name: Run correctness benchmark
+        run: python -m bench.run_benchmark --repeats 5
+
+      # The step above already fails on a missed optimum. What it cannot catch
+      # is the problem DATA changing: edit a knapsack capacity and the spec and
+      # its oracle move together, the engine still matches, and the committed
+      # expected_optimum silently becomes a different number. So compare the
+      # per-problem optima against the copy in git, not just a count.
+      - name: Verify committed results still reproduce
+        run: |
+          python - <<'PY'
+          import json, subprocess, sys
+
+          fresh = json.load(open("bench/results.json"))
+          committed = json.loads(
+              subprocess.check_output(["git", "show", "HEAD:bench/results.json"])
+          )
+
+          def optima(report):
+              return {c["problem"]: c["expected_optimum"] for c in report["cases"]}
+
+          old, new = optima(committed), optima(fresh)
+          problems = []
+          if old.keys() != new.keys():
+              problems.append(
+                  f"problem set changed: {sorted(old)} -> {sorted(new)}"
+              )
+          for name in old.keys() & new.keys():
+              if old[name] != new[name]:
+                  problems.append(
+                      f"{name}: committed optimum {old[name]} but this run enumerated {new[name]}"
+                  )
+          if problems:
+              sys.exit(
+                  "bench/results.json no longer describes this code:\n  "
+                  + "\n  ".join(problems)
+                  + "\nRe-run the benchmark and commit bench/results.json."
+              )
+
+          s = fresh["summary"]
+          print(f"{s['passed']}/{s['problems']} exact against enumerated optima, "
+                f"max error {s['max_absolute_error']:.2e}")
+          PY
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench/results.json
+          retention-days: 14
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive infra
+
+      - name: Terraform validate
+        working-directory: infra
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      # The default docker driver cannot export a GHA cache; the container
+      # driver can, and still supports load: true for the smoke test below.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: formulate:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Solve an example inside the container
+        run: |
+          docker run -d --name fm -p 8000:8000 formulate:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/healthz >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:8000/healthz || { docker logs fm; exit 1; }
+
+          # End-to-end proof that the shipped image actually solves: the
+          # production-planning example must return the hand-derived optimum
+          # of 5450 (documented in formulate/examples/production_planning.md). A broken
+          # solver, missing HiGHS wheel, or bad COPY would fail here.
+          curl -sf -X POST http://localhost:8000/solve \
+            -H 'Content-Type: application/json' \
+            -d '{"problem":"We make chairs, tables and desks on two machines. Maximize profit subject to machine capacity."}' \
+            -o solve.json || { docker logs fm; exit 1; }
+
+          python3 - <<'PY'
+          import json, sys
+          sol = json.load(open("solve.json"))["solution"]
+          print("status:", sol["status"], "solver:", sol["solver"], "objective:", sol["objective"])
+          assert sol["status"] == "optimal", sol
+          assert abs(sol["objective"] - 5450.0) < 1e-6, f"expected 5450, got {sol['objective']}"
+          print("container reproduced the documented optimum")
+          PY

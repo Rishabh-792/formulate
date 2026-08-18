@@ -12,10 +12,10 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo-root import
 
-from formulate.errors import FormulateError  # noqa: E402
-from formulate.interpreter import get_interpreter  # noqa: E402
-from formulate.llm import get_settings  # noqa: E402
-from formulate.pipeline import run_from_spec  # noqa: E402
+from formulate.errors import FormulateError
+from formulate.interpreter import get_interpreter
+from formulate.llm import get_settings
+from formulate.pipeline import run_from_spec
 
 _DEFAULT = (
     "Meridian Woodworks builds chairs, tables, and desks. Every product "

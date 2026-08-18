@@ -23,6 +23,7 @@ from .spec import (
     Bin,
     ConstraintDef,
     Expr,
+    IndexBinding,
     ModelSpec,
     Neg,
     Num,
@@ -46,6 +47,27 @@ class TransformNote(BaseModel):
     detail: str
 
 
+def _referenced_indices(node: Expr) -> set[str]:
+    """Every index name appearing in a subscript anywhere under `node`.
+
+    Used to keep a generated epigraph variable indexed by the bindings it
+    actually depends on rather than by every binding that happens to enclose
+    it.
+    """
+    if isinstance(node, Ref):
+        return set(node.indices)
+    if isinstance(node, Neg):
+        return _referenced_indices(node.operand)
+    if isinstance(node, Abs):
+        return _referenced_indices(node.operand)
+    if isinstance(node, Sum):
+        # The sum binds its own index, so it is not free in the parent scope.
+        return _referenced_indices(node.body) - {node.index}
+    if isinstance(node, Bin):
+        return _referenced_indices(node.left) | _referenced_indices(node.right)
+    return set()
+
+
 class _Rewriter:
     def __init__(self, spec: ModelSpec) -> None:
         self.spec = spec
@@ -54,6 +76,10 @@ class _Rewriter:
         self.new_constraints: list[ConstraintDef] = []
         self.notes: list[TransformNote] = []
         self._counter = 0
+        # Index bindings of the sum()s currently being walked, outermost first.
+        # An abs() rewritten inside `sum(d in D, ...)` needs an epigraph
+        # variable per member of D, not a single scalar.
+        self._bindings: list[IndexBinding] = []
 
     def _fresh(self, stem: str) -> str:
         self._counter += 1
@@ -111,21 +137,41 @@ class _Rewriter:
                 f"or >= side) cannot be linearized without binaries — roadmap item"
             )
         t = self._fresh("abs")
-        self.new_vars.append(VarDef(name=t, domain="continuous", lower=0.0))
+        # Carry the enclosing sum indices onto the epigraph variable and its
+        # two constraints, so `sum(d in D, abs(...))` yields t[d] bounded for
+        # every d rather than one scalar t shared across the whole sum.
+        #
+        # Only the indices the operand actually references: indexing by every
+        # enclosing binding is correct but multiplicatively wasteful. A
+        # constraint `forall (i in I, j in J)` containing
+        # `sum(k in K, abs(x[k] - 1))` would otherwise create |I|*|J|*|K|
+        # epigraph variables where |K| suffice - 8000 instead of 20 at
+        # |I|=|J|=|K|=20, turning an easy MILP into a large one.
         inner = self._walk(node.operand, location, convex=False)
+        used = _referenced_indices(inner) | _referenced_indices(node.operand)
+        bindings = tuple(b for b in self._bindings if b.index in used)
+        indices = tuple(b.index for b in bindings)
+        sets = [b.over for b in bindings]
+
+        self.new_vars.append(
+            VarDef(name=t, indexed_by=sets, domain="continuous", lower=0.0)
+        )
         e = unparse(inner)
+        ref = Ref(t, indices)
+        lhs = unparse(ref)
         self.new_constraints += [
-            ConstraintDef(name=f"{t}_pos", expr=f"{t} >= {e}"),
-            ConstraintDef(name=f"{t}_neg", expr=f"{t} >= -({e})"),
+            ConstraintDef(name=f"{t}_pos", forall=list(bindings), expr=f"{lhs} >= {e}"),
+            ConstraintDef(name=f"{t}_neg", forall=list(bindings), expr=f"{lhs} >= -({e})"),
         ]
+        scope = f" for each {', '.join(indices)}" if indices else ""
         self.notes.append(
             TransformNote(
                 transform="abs-epigraph",
                 location=location,
-                detail=f"replaced abs({e}) with epigraph variable {t}",
+                detail=f"replaced abs({e}) with epigraph variable {lhs}{scope}",
             )
         )
-        return Ref(t)
+        return ref
 
     # -- generic walk -------------------------------------------------------
 
@@ -135,7 +181,12 @@ class _Rewriter:
         if isinstance(node, Neg):
             return Neg(self._walk(node.operand, location, convex=False))
         if isinstance(node, Sum):
-            return Sum(node.index, node.over, self._walk(node.body, location, convex))
+            self._bindings.append(IndexBinding(index=node.index, over=node.over))
+            try:
+                body = self._walk(node.body, location, convex)
+            finally:
+                self._bindings.pop()
+            return Sum(node.index, node.over, body)
         if isinstance(node, Abs):
             return self._rewrite_abs(node, location, convex)
         if isinstance(node, Bin):
@@ -170,11 +221,15 @@ def linearize(spec: ModelSpec) -> tuple[ModelSpec, list[TransformNote]]:
         # lhs of <= (and rhs of >=) are convex positions for abs()
         left_convex = rel.op == "<="
         right_convex = rel.op == ">="
+        # Seed with the constraint's own forall so an abs() inside a
+        # per-index constraint gets a per-index epigraph variable.
+        rw._bindings = list(c.forall)
         new_rel = Rel(
             rel.op,
             rw._walk(rel.left, f"constraint:{c.name}", left_convex),
             rw._walk(rel.right, f"constraint:{c.name}", right_convex),
         )
+        rw._bindings = []
         c.expr = unparse(new_rel)
 
     out.variables = out.variables + rw.new_vars

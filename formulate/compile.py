@@ -90,10 +90,7 @@ def compile_spec(spec: ModelSpec) -> pyo.ConcreteModel:
 
     for p in spec.params:
         idx_sets = [getattr(m, n) for n in p.indexed_by]
-        if idx_sets:
-            init = _param_init(p.values)  # type: ignore[arg-type]
-        else:
-            init = p.values
+        init = _param_init(p.values) if idx_sets else p.values  # type: ignore[arg-type]
         setattr(m, p.name, pyo.Param(*idx_sets, initialize=init, within=pyo.Reals))
 
     for v in spec.variables:

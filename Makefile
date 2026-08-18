@@ -7,7 +7,7 @@ dev:
 	pip install -r requirements-dev.txt
 
 demo:
-	python -m formulate.pipeline examples/production_planning.spec.json
+	python -m formulate.pipeline formulate/examples/production_planning.spec.json
 
 test:
 	pytest -q

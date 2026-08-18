@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from pydantic import ValidationError
 
@@ -22,7 +22,7 @@ from .spec import ModelSpec
 
 logger = logging.getLogger(__name__)
 
-_EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
+EXAMPLES_DIR = Path(__file__).resolve().parent / "examples"
 
 
 class Interpreter(Protocol):
@@ -49,7 +49,7 @@ class MockInterpreter:
     the *spec* is hand-written, but everything after it is the same
     deterministic code Azure mode uses."""
 
-    _ROUTES = [
+    _ROUTES: ClassVar[list[tuple[tuple[str, ...], str]]] = [
         (("ship", "shipping", "transport", "warehouse", "plant"), "transportation"),
         (("produce", "product", "machine", "profit", "capacity"), "production_planning"),
     ]
@@ -67,7 +67,7 @@ class MockInterpreter:
                 "for arbitrary problems"
             )
         logger.info("mock interpreter matched example '%s'", best)
-        return ModelSpec.from_file(_EXAMPLES_DIR / f"{best}.spec.json")
+        return ModelSpec.from_file(EXAMPLES_DIR / f"{best}.spec.json")
 
 
 def get_interpreter() -> Interpreter:

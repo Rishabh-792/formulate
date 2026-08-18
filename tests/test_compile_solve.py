@@ -64,7 +64,7 @@ def test_solve_transportation_known_optimum(transportation_spec):
 @needs_solver
 def test_emitted_source_is_executable(production_spec):
     ns: dict = {}
-    exec(emit_pyomo_source(production_spec), ns)  # noqa: S102 - our own generated code
+    exec(emit_pyomo_source(production_spec), ns)
     m = ns["m"]
     assert isinstance(m, pyo.ConcreteModel)
     result = solve_model(m)

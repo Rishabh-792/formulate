@@ -2,10 +2,10 @@
 
 **Plain-English business problems in. Solved, explained optimization models out.**
 
-![python](https://img.shields.io/badge/python-3.11%2B-blue)
+[![ci](https://github.com/Rishabh-792/formulate/actions/workflows/ci.yml/badge.svg)](https://github.com/Rishabh-792/formulate/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![solver](https://img.shields.io/badge/solver-HiGHS-orange)
-![tests](https://img.shields.io/badge/tests-pytest-brightgreen)
 
 Formulate turns a paragraph like *"we make three products on two machines,
 maximize profit"* into a typed, validated model specification, compiles that
@@ -36,7 +36,7 @@ flowchart LR
 
 ## A worked example, end to end
 
-**You type** (see `examples/production_planning.md`):
+**You type** (see `formulate/examples/production_planning.md`):
 
 > Meridian Woodworks builds chairs, tables, and desks. Every product passes
 > through two machines: cutting and assembly. A chair needs 1 cutting hour
@@ -63,7 +63,10 @@ flowchart LR
 }
 ```
 
-**The compiler emits (and executes) Pyomo** (excerpt of `emit_pyomo_source`):
+**The compiler emits Pyomo source** (excerpt of `emit_pyomo_source`) — as a
+string, for you to read and audit. The solver path never `exec`s it: it builds
+the Pyomo objects directly from the spec, so a generated model is never a code
+execution path.
 
 ```python
 m.make = pyo.Var(m.P, domain=pyo.Reals, bounds=(0.0, None))
@@ -91,7 +94,7 @@ m.objective = pyo.Objective(expr=sum((m.profit[p] * m.make[p]) for p in m.P), se
 > out; the cutting machine is the bottleneck while assembly has 40 hours to
 > spare.
 
-That optimum is derived by hand in `examples/production_planning.md` and
+That optimum is derived by hand in `formulate/examples/production_planning.md` and
 asserted in `tests/test_compile_solve.py` — if the compiler ever miscompiles,
 CI fails with a number, not a vibe.
 
@@ -101,7 +104,7 @@ CI fails with a number, not a vibe.
 
 ```bash
 pip install -r requirements.txt
-python -m formulate.pipeline examples/production_planning.spec.json
+python -m formulate.pipeline formulate/examples/production_planning.spec.json
 python -m formulate.pipeline --text "Ship pallets from two plants to three warehouses at minimum cost"
 ```
 
@@ -154,7 +157,7 @@ atom       := NUMBER
             | "(" expr ")"
 ```
 
-Small on purpose: an LLM emits it reliably, a ~150-line recursive-descent
+Small on purpose: an LLM emits it reliably, a ~130-line recursive-descent
 parser covers it completely, and the AST round-trips (`parse(unparse(x)) ==
 x`), which is what lets the linearizer and the infeasibility diagnostic
 rewrite models safely. `abs()` parses but deliberately does not compile —
@@ -191,11 +194,51 @@ pytest -q
 ruff check .
 ```
 
-The suite covers the parser (round-trips, rejection cases), the validator
-(one test per defect class), both linearization transforms (structure *and*
-solved optima), the compiler + solver end-to-end against hand-derived
-optima, the elastic infeasibility diagnostic, and the API. CI runs all of
-it keyless on every push.
+**62 tests, 89% line coverage, no API keys.** The suite covers the
+parser (round-trips, rejection cases), the validator (11 of its 18 defect
+codes; `index-shadow`, `member-set-mismatch`, `duplicate-member`,
+`shape-mismatch`, `binary-bounds`, `duplicate-index` and `constant-constraint`
+are emitted but untested), both linearization transforms (structure *and*
+solved optima), the
+compiler and solver end to end, the elastic infeasibility diagnostic, and the
+API. CI runs all of it keyless on every push, across Python 3.11/3.12/3.13.
+
+## Correctness benchmark
+
+Tests can only check the engine against itself. The benchmark checks it
+against **exhaustive enumeration in plain Python** — an oracle that never
+calls Pyomo or HiGHS, so agreement is evidence of correctness rather than of
+self-consistency.
+
+```bash
+python -m bench.run_benchmark
+```
+
+| Problem | Exercises | Optimum | Oracle | Error |
+|---|---|---:|---|---:|
+| knapsack | binary domain, scalar param | 196 | 2^8 = 256 subsets | 0.00e+00 |
+| assignment | 2-D param, equality, nested sum | 11 | 4! = 24 permutations | 0.00e+00 |
+| set_cover | 0/1 incidence, `>=` | 28 | 2^6 = 64 subsets | 0.00e+00 |
+| integer_production | integer domain, upper bounds | 900 | 2,197 grid points | 0.00e+00 |
+| abs_deviation | **abs() epigraph transform** | 5 | 14,641 rosters | 0.00e+00 |
+
+**5/5 exact, max absolute error 0.00e+00.** That is the claim worth making;
+the latency figure is not. The committed
+[`bench/results.json`](bench/results.json) records a 37 ms median on the
+Windows laptop that produced it, but reruns on the same machine ranged 45-150
+ms and the Linux CI runner is roughly 3x faster. Latency here is dominated by
+machine load and process warm-up, not by the engine — regenerate it rather
+than trust the number. Correctness, unlike timing, is exact and reproducible:
+CI reruns the benchmark and fails if any problem misses its enumerated
+optimum.
+
+The benchmark earned its keep immediately: `abs_deviation` exposed a bug in
+the linearizer. `abs()` inside a `sum(d in D, ...)` emitted a single *scalar*
+epigraph variable whose constraints referenced the sum's bound index, which
+the validator rejected outright — so every model minimizing a sum of absolute
+deviations was unsolvable. The transform now carries enclosing index bindings
+onto both the epigraph variable and its constraints. Two regression tests pin
+the indexed and scalar paths.
 
 ## Roadmap
 
