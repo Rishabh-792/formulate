@@ -73,6 +73,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The default docker driver cannot export a GHA cache; the container
+      # driver can, and still supports load: true for the smoke test below.
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build image
         uses: docker/build-push-action@v6
         with:
