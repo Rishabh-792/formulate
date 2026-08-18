@@ -19,7 +19,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "pydantic>=2.7",
+    "pydantic>=2.13.4",
     "pydantic-settings>=2.2",
     "pyomo>=6.7",
     "highspy>=1.7",
