@@ -5,18 +5,107 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same ref supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python >= 3.11; test everything it claims.
+        python-version: ["3.11", "3.12", "3.13"]
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
+
       - name: Install
         run: pip install -r requirements-dev.txt
+
       - name: Lint
         run: ruff check .
-      - name: Test
-        run: pytest -q
+
+      - name: Test (mock mode, no API keys)
+        run: pytest -q --cov=formulate --cov=api --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive infra
+
+      - name: Terraform validate
+        working-directory: infra
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: formulate:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Solve an example inside the container
+        run: |
+          docker run -d --name fm -p 8000:8000 formulate:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/healthz >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:8000/healthz || { docker logs fm; exit 1; }
+
+          # End-to-end proof that the shipped image actually solves: the
+          # production-planning example must return the hand-derived optimum
+          # of 5450 (documented in examples/production_planning.md). A broken
+          # solver, missing HiGHS wheel, or bad COPY would fail here.
+          curl -sf -X POST http://localhost:8000/solve \
+            -H 'Content-Type: application/json' \
+            -d '{"problem":"We make chairs, tables and desks on two machines. Maximize profit subject to machine capacity."}' \
+            -o solve.json || { docker logs fm; exit 1; }
+
+          python3 - <<'PY'
+          import json, sys
+          sol = json.load(open("solve.json"))["solution"]
+          print("status:", sol["status"], "solver:", sol["solver"], "objective:", sol["objective"])
+          assert sol["status"] == "optimal", sol
+          assert abs(sol["objective"] - 5450.0) < 1e-6, f"expected 5450, got {sol['objective']}"
+          print("container reproduced the documented optimum")
+          PY

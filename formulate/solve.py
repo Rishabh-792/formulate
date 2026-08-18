@@ -44,13 +44,13 @@ class SolveResult(BaseModel):
 
 
 def _find_solver(preferred: str | None = None):
-    names = (preferred,) + _SOLVER_PREFERENCE if preferred else _SOLVER_PREFERENCE
+    names = (preferred, *_SOLVER_PREFERENCE) if preferred else _SOLVER_PREFERENCE
     for name in names:
         try:
             solver = pyo.SolverFactory(name)
             if solver is not None and solver.available(exception_flag=False):
                 return name, solver
-        except Exception:  # noqa: BLE001 - probing availability, any failure means "not this one"
+        except Exception:
             continue
     raise SolverError(
         "no solver available — `pip install highspy` provides one with no system deps"

@@ -2,10 +2,10 @@
 
 **Plain-English business problems in. Solved, explained optimization models out.**
 
-![python](https://img.shields.io/badge/python-3.11%2B-blue)
+[![ci](https://github.com/Rishabh-792/formulate/actions/workflows/ci.yml/badge.svg)](https://github.com/Rishabh-792/formulate/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![solver](https://img.shields.io/badge/solver-HiGHS-orange)
-![tests](https://img.shields.io/badge/tests-pytest-brightgreen)
 
 Formulate turns a paragraph like *"we make three products on two machines,
 maximize profit"* into a typed, validated model specification, compiles that
