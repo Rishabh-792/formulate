@@ -3,13 +3,35 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 *.egg-info/
 dist/
 build/
 .pytest_cache/
 .ruff_cache/
 .coverage
+coverage.xml
 htmlcov/
 .mypy_cache/
 .DS_Store
 Thumbs.db
+
+# Terraform. State is the important one: infra/main.tf provisions an Azure
+# OpenAI account and writes its primary key into a Key Vault secret resource,
+# and Terraform persists every resource attribute to state in plaintext. One
+# `git add -A` after an apply would publish a live credential.
+# The provider lock file IS committed - it pins reproducible builds.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Keys and certificates, none of which belong in this repo.
+*.pem
+*.key
+*.pfx
+*.p12
+id_rsa

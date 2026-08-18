@@ -39,7 +39,11 @@ Source = "https://github.com/Rishabh-792/formulate"
 packages = ["formulate"]
 
 [tool.setuptools.package-data]
-formulate = ["py.typed"]
+# The bundled specs and prompts are not optional extras: the keyless mock
+# interpreter loads a spec from examples/ and the Azure path loads its system
+# prompts from prompts/. Ship them or `pip install formulate` raises
+# FileNotFoundError on the first call.
+formulate = ["py.typed", "examples/*.json", "examples/*.md", "prompts/*.md"]
 
 [tool.ruff]
 line-length = 100

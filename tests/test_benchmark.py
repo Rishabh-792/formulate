@@ -88,3 +88,97 @@ def test_abs_in_a_plain_constraint_stays_scalar():
     assert result.solution.status == "optimal"
     # |x - 10| <= 3 with x maximized puts the optimum at 13.
     assert result.solution.objective == pytest.approx(13.0, abs=TOLERANCE)
+
+
+def _abs_spec(
+    forall: list[dict],
+    expr: str,
+    extra_sets: list[dict],
+    extra_params: list[dict] | None = None,
+) -> ModelSpec:
+    extra_params = extra_params or []
+    return ModelSpec.model_validate(
+        {
+            "name": "abs_scope",
+            "sets": [{"name": "D", "members": ["a", "b", "c"]}, *extra_sets],
+            "params": [{"name": "cap", "indexed_by": [], "values": 50.0}, *extra_params],
+            "variables": [
+                {"name": "x", "indexed_by": ["D"], "domain": "continuous",
+                 "lower": 0.0, "upper": 10.0}
+            ],
+            "constraints": [{"name": "c", "forall": forall, "expr": expr}],
+            "objective": {"sense": "minimize", "expr": "sum(d in D, x[d])"},
+        }
+    )
+
+
+def test_abs_inherits_the_constraints_own_forall():
+    """A constraint's forall must reach the epigraph variable.
+
+    Previously untested: instrumenting the whole suite showed the binding
+    stack only ever held () or (('d','D'),), so the line that seeds the stack
+    from `c.forall` could be deleted with every test still passing.
+    """
+    spec = _abs_spec([{"index": "d", "over": "D"}], "abs(x[d] - 2) <= cap", [])
+    linear, _ = linearize(spec)
+
+    epigraph = [v for v in linear.variables if v.name.startswith("lin_abs_")]
+    assert [v.indexed_by for v in epigraph] == [["D"]]
+    generated = [c for c in linear.constraints if c.name.startswith("lin_abs_")]
+    assert all([b.over for b in c.forall] == ["D"] for c in generated)
+    assert run_from_spec(spec).solution.status == "optimal"
+
+
+def test_abs_composes_constraint_forall_with_an_enclosing_sum():
+    """Both scopes, outermost first, matching the subscript order."""
+    spec = _abs_spec(
+        [{"index": "d", "over": "D"}],
+        "sum(e in E, abs(x[d] - target[e])) <= cap",
+        [{"name": "E", "members": ["e1", "e2"]}],
+        [{"name": "target", "indexed_by": ["E"], "values": {"e1": 2.0, "e2": 5.0}}],
+    )
+    linear, _ = linearize(spec)
+
+    epigraph = [v for v in linear.variables if v.name.startswith("lin_abs_")]
+    assert [v.indexed_by for v in epigraph] == [["D", "E"]]
+    generated = [c for c in linear.constraints if c.name.startswith("lin_abs_")]
+    assert all([b.index for b in c.forall] == ["d", "e"] for c in generated)
+    assert run_from_spec(spec).solution.status == "optimal"
+
+
+def test_epigraph_is_not_indexed_by_bindings_the_operand_ignores():
+    """Indexing by every enclosing binding is correct but multiplicative.
+
+    `forall (i in I, j in J)` around `sum(k in K, abs(x[k] - 1))` created
+    |I|*|J|*|K| epigraph variables where |K| suffice - 8000 against 20 at
+    size 20, which turns an easy MILP into a large one.
+    """
+    spec = ModelSpec.model_validate(
+        {
+            "name": "over_indexing",
+            "sets": [
+                {"name": "I", "members": ["i1", "i2"]},
+                {"name": "J", "members": ["j1", "j2"]},
+                {"name": "K", "members": ["k1", "k2"]},
+            ],
+            "params": [{"name": "cap", "indexed_by": [], "values": 100.0}],
+            "variables": [
+                {"name": "x", "indexed_by": ["K"], "domain": "continuous",
+                 "lower": 0.0, "upper": 10.0}
+            ],
+            "constraints": [
+                {
+                    "name": "c",
+                    "forall": [{"index": "i", "over": "I"}, {"index": "j", "over": "J"}],
+                    "expr": "sum(k in K, abs(x[k] - 1)) <= cap",
+                }
+            ],
+            "objective": {"sense": "minimize", "expr": "sum(k in K, x[k])"},
+        }
+    )
+    linear, _ = linearize(spec)
+
+    epigraph = [v for v in linear.variables if v.name.startswith("lin_abs_")]
+    # Only K: the operand references x[k] and nothing bound by I or J.
+    assert [v.indexed_by for v in epigraph] == [["K"]]
+    assert run_from_spec(spec).solution.status == "optimal"

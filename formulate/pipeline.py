@@ -3,7 +3,7 @@
     interpret -> validate -> linearize -> compile -> solve -> explain
 
 CLI (keyless demo):
-    python -m formulate.pipeline examples/production_planning.spec.json
+    python -m formulate.pipeline formulate/examples/production_planning.spec.json
     python -m formulate.pipeline --text "We make chairs, tables and desks..."
 """
 

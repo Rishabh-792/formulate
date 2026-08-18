@@ -7,13 +7,17 @@ Docs: http://localhost:8000/docs
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from formulate import __version__
 from formulate.errors import FormulateError, SpecValidationError
+
+# EXAMPLES_DIR comes from the package rather than being recomputed here: the
+# bundled data lives inside formulate/ so it ships in the wheel, and a second
+# copy of the path would break again on the next layout change.
+from formulate.interpreter import EXAMPLES_DIR as _EXAMPLES_DIR
 from formulate.interpreter import get_interpreter
 from formulate.llm import get_settings
 from formulate.pipeline import PipelineResult, run_from_spec, run_from_text
@@ -26,8 +30,6 @@ app = FastAPI(
     version=__version__,
     description="Plain-English optimization problems, compiled and solved.",
 )
-
-_EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
 
 class ProblemIn(BaseModel):

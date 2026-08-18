@@ -47,6 +47,27 @@ class TransformNote(BaseModel):
     detail: str
 
 
+def _referenced_indices(node: Expr) -> set[str]:
+    """Every index name appearing in a subscript anywhere under `node`.
+
+    Used to keep a generated epigraph variable indexed by the bindings it
+    actually depends on rather than by every binding that happens to enclose
+    it.
+    """
+    if isinstance(node, Ref):
+        return set(node.indices)
+    if isinstance(node, Neg):
+        return _referenced_indices(node.operand)
+    if isinstance(node, Abs):
+        return _referenced_indices(node.operand)
+    if isinstance(node, Sum):
+        # The sum binds its own index, so it is not free in the parent scope.
+        return _referenced_indices(node.body) - {node.index}
+    if isinstance(node, Bin):
+        return _referenced_indices(node.left) | _referenced_indices(node.right)
+    return set()
+
+
 class _Rewriter:
     def __init__(self, spec: ModelSpec) -> None:
         self.spec = spec
@@ -119,14 +140,22 @@ class _Rewriter:
         # Carry the enclosing sum indices onto the epigraph variable and its
         # two constraints, so `sum(d in D, abs(...))` yields t[d] bounded for
         # every d rather than one scalar t shared across the whole sum.
-        bindings = tuple(self._bindings)
+        #
+        # Only the indices the operand actually references: indexing by every
+        # enclosing binding is correct but multiplicatively wasteful. A
+        # constraint `forall (i in I, j in J)` containing
+        # `sum(k in K, abs(x[k] - 1))` would otherwise create |I|*|J|*|K|
+        # epigraph variables where |K| suffice - 8000 instead of 20 at
+        # |I|=|J|=|K|=20, turning an easy MILP into a large one.
+        inner = self._walk(node.operand, location, convex=False)
+        used = _referenced_indices(inner) | _referenced_indices(node.operand)
+        bindings = tuple(b for b in self._bindings if b.index in used)
         indices = tuple(b.index for b in bindings)
         sets = [b.over for b in bindings]
 
         self.new_vars.append(
             VarDef(name=t, indexed_by=sets, domain="continuous", lower=0.0)
         )
-        inner = self._walk(node.operand, location, convex=False)
         e = unparse(inner)
         ref = Ref(t, indices)
         lhs = unparse(ref)

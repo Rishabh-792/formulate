@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from formulate.spec import ModelSpec  # noqa: E402
 
-EXAMPLES = ROOT / "examples"
+EXAMPLES = ROOT / "formulate" / "examples"
 
 
 @pytest.fixture

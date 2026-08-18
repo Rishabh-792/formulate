@@ -69,25 +69,45 @@ jobs:
       - name: Run correctness benchmark
         run: python -m bench.run_benchmark --repeats 5
 
+      # The step above already fails on a missed optimum. What it cannot catch
+      # is the problem DATA changing: edit a knapsack capacity and the spec and
+      # its oracle move together, the engine still matches, and the committed
+      # expected_optimum silently becomes a different number. So compare the
+      # per-problem optima against the copy in git, not just a count.
       - name: Verify committed results still reproduce
         run: |
           python - <<'PY'
           import json, subprocess, sys
 
-          fresh = json.load(open("bench/results.json"))["summary"]
+          fresh = json.load(open("bench/results.json"))
           committed = json.loads(
               subprocess.check_output(["git", "show", "HEAD:bench/results.json"])
-          )["summary"]
+          )
 
-          if fresh["passed"] != fresh["problems"]:
-              sys.exit(f"{fresh['failed']} problem(s) missed the enumerated optimum")
-          if committed["problems"] != fresh["problems"]:
-              sys.exit(
-                  f"problem count changed ({committed['problems']} -> {fresh['problems']}); "
-                  "re-run the benchmark and commit bench/results.json"
+          def optima(report):
+              return {c["problem"]: c["expected_optimum"] for c in report["cases"]}
+
+          old, new = optima(committed), optima(fresh)
+          problems = []
+          if old.keys() != new.keys():
+              problems.append(
+                  f"problem set changed: {sorted(old)} -> {sorted(new)}"
               )
-          print(f"{fresh['passed']}/{fresh['problems']} exact, "
-                f"max error {fresh['max_absolute_error']:.2e}")
+          for name in old.keys() & new.keys():
+              if old[name] != new[name]:
+                  problems.append(
+                      f"{name}: committed optimum {old[name]} but this run enumerated {new[name]}"
+                  )
+          if problems:
+              sys.exit(
+                  "bench/results.json no longer describes this code:\n  "
+                  + "\n  ".join(problems)
+                  + "\nRe-run the benchmark and commit bench/results.json."
+              )
+
+          s = fresh["summary"]
+          print(f"{s['passed']}/{s['problems']} exact against enumerated optima, "
+                f"max error {s['max_absolute_error']:.2e}")
           PY
 
       - name: Upload benchmark results
@@ -147,7 +167,7 @@ jobs:
 
           # End-to-end proof that the shipped image actually solves: the
           # production-planning example must return the hand-derived optimum
-          # of 5450 (documented in examples/production_planning.md). A broken
+          # of 5450 (documented in formulate/examples/production_planning.md). A broken
           # solver, missing HiGHS wheel, or bad COPY would fail here.
           curl -sf -X POST http://localhost:8000/solve \
             -H 'Content-Type: application/json' \
