@@ -195,13 +195,15 @@ ruff check .
 ```
 
 **62 tests, 89% line coverage, no API keys.** The suite covers the
-parser (round-trips, rejection cases), the validator (11 of its 18 defect
-codes; `index-shadow`, `member-set-mismatch`, `duplicate-member`,
-`shape-mismatch`, `binary-bounds`, `duplicate-index` and `constant-constraint`
-are emitted but untested), both linearization transforms (structure *and*
-solved optima), the
-compiler and solver end to end, the elastic infeasibility diagnostic, and the
-API. CI runs all of it keyless on every push, across Python 3.11/3.12/3.13.
+parser (round-trips, rejection cases), the validator, both linearization
+transforms (structure *and* solved optima), the compiler and solver end to end,
+the elastic infeasibility diagnostic, and the API. CI runs all of it keyless on
+every push, across Python 3.11/3.12/3.13.
+
+Validator coverage is partial: 11 of its 18 defect codes are tested.
+`index-shadow`, `member-set-mismatch`, `duplicate-member`, `shape-mismatch`,
+`binary-bounds`, `duplicate-index` and `constant-constraint` are emitted but
+untested.
 
 ## Correctness benchmark
 
