@@ -226,9 +226,9 @@ python -m bench.run_benchmark
 
 **5/5 exact, max absolute error 0.00e+00.** That is the claim worth making;
 the latency figure is not. The committed
-[`bench/results.json`](bench/results.json) records a 37 ms median on the
-Windows laptop that produced it, but reruns on the same machine ranged 45-150
-ms and the Linux CI runner is roughly 3x faster. Latency here is dominated by
+[`bench/results.json`](bench/results.json) records a 116 ms median on the
+Windows laptop that produced it; reruns on the same machine ranged 45-150 ms,
+and the Linux CI runner is roughly 3x faster. Latency here is dominated by
 machine load and process warm-up, not by the engine — regenerate it rather
 than trust the number. Correctness, unlike timing, is exact and reproducible:
 CI reruns the benchmark and fails if any problem misses its enumerated
