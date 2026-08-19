@@ -242,7 +242,11 @@ deviations was unsolvable. The transform now carries enclosing index bindings
 onto both the epigraph variable and its constraints. Two regression tests pin
 the indexed and scalar paths.
 
-## Roadmap
+## Status and roadmap
+
+**Complete at v1.0.0, not under active development.** Formulate is a reference
+implementation meant to be read and run, not a maintained dependency. CI is
+green on Python 3.11/3.12/3.13. The items below are intent, not commitments.
 
 - More linearization transforms: McCormick envelopes for bilinear terms,
   piecewise-linear costs (SOS2), indicator constraints.
