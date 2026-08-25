@@ -5,4 +5,4 @@ httpx>=0.28.1
 # Pinned exactly: an unpinned floor lets a new ruff release expand the default
 # ruleset and turn CI red without a code change. Dependabot proposes bumps as
 # PRs that must pass CI before merging.
-ruff==0.16.3
+ruff==0.16.4
