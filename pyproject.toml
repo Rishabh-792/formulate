@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 # The engine core is solver-only; the service, UI, and Azure paths are extras.
 api = ["fastapi>=0.111", "uvicorn>=0.30"]
-ui = ["streamlit>=1.35"]
+ui = ["streamlit>=1.62.0"]
 azure = ["openai>=3.1.0"]
 
 [project.urls]
